@@ -1,3 +1,18 @@
+### Install PostgreSQL
+```bash
+sudo apt-get install postgre-sql
+```
+
+### Connect DB with the user postgres
+```bash
+psql -U postgres
+```
+
+### Connect DB with the new user
+```bash
+psql -U clique clique_mpc_db
+```
+
 ```sql
 CREATE TABLE "user" (
     uid SERIAL PRIMARY KEY,
@@ -7,3 +22,4 @@ CREATE TABLE "user" (
     is_active BOOLEAN DEFAULT TRUE NOT NULL
 );
 ```
+
