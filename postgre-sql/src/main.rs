@@ -1,55 +1,69 @@
-use chrono::{NaiveDateTime, Utc};
-use tokio_postgres::{Error, NoTls};
+use std::time::SystemTime;
+use tokio_postgres::{Client, Error, NoTls};
+
+struct PostgresManager {
+    client: Client,
+}
+
+impl PostgresManager {
+    async fn new(connection_string: &str) -> Result<Self, Error> {
+        let (client, connection) = tokio_postgres::connect(connection_string, NoTls).await?;
+
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                eprintln!("connection error: {}", e);
+            }
+        });
+
+        Ok(PostgresManager { client })
+    }
+
+    async fn insert_record(
+        &self,
+        table_name: &str,
+        name: &str,
+        registration_time: SystemTime,
+        login_time: SystemTime,
+        is_active: bool,
+    ) -> Result<(), Error> {
+        // Define the SQL query with placeholders for parameters
+        let query = format!("INSERT INTO \"{}\" (name, registration_time, login_time, is_active) VALUES ($1, $2, $3, $4)", table_name);
+
+        // Execute the query with the values
+        self.client
+            .execute(
+                &query,
+                &[&name, &registration_time, &login_time, &is_active],
+            )
+            .await?;
+
+        Ok(())
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    // Establish a connection to the database
-    let (client, connection) = tokio_postgres::connect(
-        "host=localhost user=clique password=123456 dbname=clique_mpc_db",
-        NoTls,
-    )
-    .await?;
-
-    // Spawn a task to process the connection asynchronously
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
-        }
-    });
-
-    // Define the SQL query for inserting records
-    let query = "INSERT INTO \"user\" (name, registration_time, login_time) VALUES ($1, $2, $3)";
-
-    // Prepare the statement
-    let statement = client.prepare(&query).await?;
-
-    // Define the parameters for each record to be inserted
-    let records = vec![
-        (
-            "John",
-            NaiveDateTime::parse_from_str("2024-05-06 12:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-            NaiveDateTime::parse_from_str("2024-05-06 12:05:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-        ),
-        (
-            "Alice",
-            NaiveDateTime::parse_from_str("2024-05-06 12:10:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-            NaiveDateTime::parse_from_str("2024-05-06 12:15:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-        ),
-        (
-            "Bob",
-            NaiveDateTime::parse_from_str("2024-05-06 12:20:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-            NaiveDateTime::parse_from_str("2024-05-06 12:25:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-        ),
-    ];
-
-    // Iterate over the records and execute the insert statement for each
-    for record in records {
-        client
-            .execute(&statement, &[&record.0, &record.1, &record.2])
+    // Create a new instance of PostgresManager
+    let manager =
+        PostgresManager::new("host=localhost user=clique dbname=clique_mpc_db password=123456")
             .await?;
-    }
 
-    println!("Records inserted successfully");
+    // Define the values to be inserted
+    let table_name = "user";
+    let name = "Alice";
+    let registration_time = SystemTime::now();
+    let login_time = SystemTime::now();
+    let is_active = true;
+
+    // Insert the record into the specified table
+    manager
+        .insert_record(table_name, name, registration_time, login_time, is_active)
+        .await?;
+
+    println!(
+        "Inserted values into the '{}' table successfully.",
+        table_name
+    );
 
     Ok(())
 }
